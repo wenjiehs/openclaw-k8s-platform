@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openclaw-saas
+  labels:
+    app: openclaw-saas
+    managed-by: openclaw
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openclaw-system
+  labels:
+    app: openclaw-operator

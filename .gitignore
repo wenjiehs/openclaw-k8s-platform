@@ -1,0 +1,57 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Go 编译产物
+backend/bin/
+backend/*.exe
+backend/*.test
+backend/vendor/
+
+# 前端构建产物
+frontend/dist/
+frontend/node_modules/
+frontend/.vite/
+
+# 测试临时文件
+tmp/
+*.tmp
+
+# 环境变量文件（敏感信息，不提交）
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env.local
+
+# IDE 配置
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Docker
+.dockerignore
+
+# 日志文件
+*.log
+logs/
+
+# K8s kubeconfig（不提交，可能包含凭证）
+kubeconfig
+*.kubeconfig
+
+# 证书文件
+*.pem
+*.key
+*.crt
+*.p12
+
+# 数据库备份
+*.sql.gz
+*.dump
+
+# 编辑器缓存
+.cache/

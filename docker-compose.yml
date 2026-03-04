@@ -1,0 +1,109 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:15-alpine
+    container_name: openclaw-postgres
+    environment:
+      POSTGRES_DB: openclaw
+      POSTGRES_USER: openclaw
+      POSTGRES_PASSWORD: openclaw_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d  # 自动执行迁移SQL
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openclaw"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - openclaw-network
+
+  # Redis 缓存
+  redis:
+    image: redis:7-alpine
+    container_name: openclaw-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - openclaw-network
+
+  # 后端服务
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: openclaw-backend
+    ports:
+      - "8080:8080"
+    environment:
+      # 数据库配置
+      DATABASE_URL: postgres://openclaw:openclaw_dev_password@postgres:5432/openclaw?sslmode=disable
+      # Redis 配置
+      REDIS_URL: redis://redis:6379
+      # JWT 配置
+      JWT_SECRET: dev-jwt-secret-change-in-production
+      JWT_EXPIRE_HOURS: "24"
+      # 服务配置
+      SERVER_PORT: "8080"
+      SERVER_MODE: debug
+      # TKE 集群配置（开发环境可先留空，功能将降级）
+      TKE_CLUSTER_ID: ${TKE_CLUSTER_ID:-}
+      TKE_REGION: ${TKE_REGION:-ap-guangzhou}
+      QCLOUD_SECRET_ID: ${QCLOUD_SECRET_ID:-}
+      QCLOUD_SECRET_KEY: ${QCLOUD_SECRET_KEY:-}
+      # 企业微信通知配置（可选）
+      WECHAT_CORP_ID: ${WECHAT_CORP_ID:-}
+      WECHAT_AGENT_ID: ${WECHAT_AGENT_ID:-}
+      WECHAT_SECRET: ${WECHAT_SECRET:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app/src  # 开发时挂载源码
+    networks:
+      - openclaw-network
+    restart: unless-stopped
+
+  # 前端服务
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development  # 使用开发阶段构建
+    container_name: openclaw-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_BASE_URL: http://localhost:8080
+    volumes:
+      - ./frontend:/app                    # 挂载源码，支持热更新
+      - /app/node_modules                  # 排除 node_modules
+    depends_on:
+      - backend
+    networks:
+      - openclaw-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  openclaw-network:
+    driver: bridge

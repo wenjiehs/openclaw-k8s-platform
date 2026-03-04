@@ -1,0 +1,79 @@
+---
+# SaaS 平台后端 Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openclaw-saas-backend
+  namespace: openclaw-saas
+  labels:
+    app: openclaw-saas-backend
+spec:
+  replicas: 2  # 高可用：2 个副本
+  selector:
+    matchLabels:
+      app: openclaw-saas-backend
+  template:
+    metadata:
+      labels:
+        app: openclaw-saas-backend
+    spec:
+      serviceAccountName: openclaw-saas-backend
+      containers:
+        - name: backend
+          image: your-registry/openclaw-saas-backend:latest  # 替换为你的镜像地址
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+          env:
+            # 数据库配置（从 Secret 读取）
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-saas-secrets
+                  key: database-url
+            # Redis 配置
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-saas-secrets
+                  key: redis-url
+            # JWT 配置
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-saas-secrets
+                  key: jwt-secret
+            # 运行模式
+            - name: SERVER_MODE
+              value: "release"
+            # TKE 配置
+            - name: TKE_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: openclaw-saas-config
+                  key: tke-region
+            - name: TKE_INGRESS_DOMAIN
+              valueFrom:
+                configMapKeyRef:
+                  name: openclaw-saas-config
+                  key: tke-ingress-domain
+          # 健康检查
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5

@@ -1,0 +1,64 @@
+# RBAC 配置
+# SaaS 平台后端服务账号，需要操作 K8s 资源（创建/删除 Namespace、Deployment 等）
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: openclaw-saas-backend
+  namespace: openclaw-saas
+---
+# ClusterRole：授予 SaaS 平台管理用户 Namespace 的权限
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: openclaw-saas-operator
+rules:
+  # 管理 Namespace（创建、删除、读取）
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+  # 管理 Pod 和相关资源
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "pods/status"]
+    verbs: ["get", "list", "watch", "delete"]
+  # 管理 PVC（持久化存储）
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  # 管理 Service
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+  # 管理 Secret（存储企业微信 Token 等）
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+  # 管理 ConfigMap
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+  # 管理 Deployment
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+  # 管理 Ingress
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+  # 读取 Metrics（监控）
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list"]
+---
+# 将 ClusterRole 绑定到 SaaS 平台的 ServiceAccount
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: openclaw-saas-operator-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: openclaw-saas-operator
+subjects:
+  - kind: ServiceAccount
+    name: openclaw-saas-backend
+    namespace: openclaw-saas

@@ -1,0 +1,30 @@
+---
+# SaaS 平台后端 Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: openclaw-saas-backend
+  namespace: openclaw-saas
+spec:
+  selector:
+    app: openclaw-saas-backend
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+  type: ClusterIP
+---
+# SaaS 平台前端 Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: openclaw-saas-frontend
+  namespace: openclaw-saas
+spec:
+  selector:
+    app: openclaw-saas-frontend
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+  type: ClusterIP

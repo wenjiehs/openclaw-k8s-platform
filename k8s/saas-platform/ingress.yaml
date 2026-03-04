@@ -1,0 +1,38 @@
+---
+# SaaS 平台 Ingress（对外暴露服务）
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: openclaw-saas
+  namespace: openclaw-saas
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"  # 自动 HTTPS 证书
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+spec:
+  tls:
+    - hosts:
+        - saas.openclaw.example.com  # 替换为实际域名
+      secretName: openclaw-saas-tls
+  rules:
+    - host: saas.openclaw.example.com  # 替换为实际域名
+      http:
+        paths:
+          # API 请求路由到后端
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: openclaw-saas-backend
+                port:
+                  number: 80
+          # 其他请求路由到前端
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: openclaw-saas-frontend
+                port:
+                  number: 80
