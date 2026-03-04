@@ -83,15 +83,10 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      target: development  # 使用开发阶段构建
+      target: production  # 🔥 使用生产模式（nginx + API 代理）
     container_name: openclaw-frontend
     ports:
-      - "3000:3000"
-    environment:
-      VITE_API_BASE_URL: http://localhost:8080
-    volumes:
-      - ./frontend:/app                    # 挂载源码，支持热更新
-      - /app/node_modules                  # 排除 node_modules
+      - "3000:80"  # nginx 默认端口是 80，映射到宿主机 3000
     depends_on:
       - backend
     networks:
