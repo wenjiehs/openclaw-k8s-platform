@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -130,6 +131,17 @@ func (h *AdminHandler) ApproveApplication(c *gin.Context) {
 		return
 	}
 
+	// 设置审计上下文（后续由审计中间件统一落库）
+	middleware.SetAuditContext(c, middleware.AuditContext{
+		Action:       "approve",
+		ResourceType: "application",
+		ResourceID:   strconv.Itoa(id),
+		Extra: map[string]interface{}{
+			"instance_name": application.InstanceName,
+			"spec":          application.Spec,
+		},
+	})
+
 	// 事务提交后需要用到的实例数据（在事务外声明，事务内赋值）
 	var createdInstance *model.Instance
 
@@ -186,7 +198,16 @@ func (h *AdminHandler) ApproveApplication(c *gin.Context) {
 	// 事务提交成功后，异步触发 K8s 资源创建
 	// 注意：必须在事务外启动，否则 goroutine 里查不到刚提交的数据
 	if h.instSvc != nil && createdInstance != nil && application.User != nil {
+		h.log.Info(fmt.Sprintf("触发异步实例创建: application_id=%d instance_id=%d instance_name=%s", application.ID, createdInstance.ID, createdInstance.Name))
 		h.instSvc.CreateInstance(createdInstance, application.User)
+	} else {
+		h.log.Error(fmt.Sprintf("实例创建触发条件不满足，跳过异步创建: application_id=%d instSvc_nil=%t createdInstance_nil=%t user_nil=%t", application.ID, h.instSvc == nil, createdInstance == nil, application.User == nil))
+		if createdInstance != nil {
+			// 防止实例永久卡在 creating 状态
+			if updateErr := h.db.Model(createdInstance).Update("status", "failed").Error; updateErr != nil {
+				h.log.Error("回写实例 failed 状态失败: " + updateErr.Error())
+			}
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -235,6 +256,17 @@ func (h *AdminHandler) RejectApplication(c *gin.Context) {
 		})
 		return
 	}
+
+	// 设置审计上下文（后续由审计中间件统一落库）
+	middleware.SetAuditContext(c, middleware.AuditContext{
+		Action:       "reject",
+		ResourceType: "application",
+		ResourceID:   strconv.Itoa(id),
+		Extra: map[string]interface{}{
+			"instance_name": application.InstanceName,
+			"reject_note":   req.Note,
+		},
+	})
 
 	now := time.Now()
 	updates := map[string]interface{}{

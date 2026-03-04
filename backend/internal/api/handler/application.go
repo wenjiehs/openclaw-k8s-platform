@@ -90,6 +90,18 @@ func (h *ApplicationHandler) Create(c *gin.Context) {
 		return
 	}
 
+	// 设置审计上下文（后续由审计中间件统一落库）
+	middleware.SetAuditContext(c, middleware.AuditContext{
+		Action:       "create",
+		ResourceType: "application",
+		ResourceID:   strconv.FormatUint(uint64(application.ID), 10),
+		Extra: map[string]interface{}{
+			"instance_name": application.InstanceName,
+			"spec":          application.Spec,
+			"duration_type": application.DurationType,
+		},
+	})
+
 	c.JSON(http.StatusCreated, gin.H{
 		"code":    200,
 		"message": "申请提交成功",
@@ -210,6 +222,16 @@ func (h *ApplicationHandler) Cancel(c *gin.Context) {
 		})
 		return
 	}
+
+	// 设置审计上下文（后续由审计中间件统一落库）
+	middleware.SetAuditContext(c, middleware.AuditContext{
+		Action:       "cancel",
+		ResourceType: "application",
+		ResourceID:   strconv.Itoa(id),
+		Extra: map[string]interface{}{
+			"instance_name": application.InstanceName,
+		},
+	})
 
 	if err := h.db.Model(&application).Update("status", "cancelled").Error; err != nil {
 		h.log.Error("撤销申请失败: " + err.Error())

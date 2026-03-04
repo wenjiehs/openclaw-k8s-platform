@@ -37,18 +37,46 @@ func NewInstanceService(db *gorm.DB, cfg *config.Config, log *logger.Logger, ope
 // CreateInstance 异步创建 OpenClaw 实例
 // 在审批通过后调用，异步执行 K8s 资源创建
 func (s *InstanceService) CreateInstance(instance *model.Instance, user *model.User) {
+	markFailed := func(reason string) {
+		if err := s.db.Model(instance).Update("status", "failed").Error; err != nil {
+			s.log.Error(fmt.Sprintf("更新实例失败状态异常: instance=%s err=%v", instance.Name, err))
+		}
+		if s.notifySvc != nil && user != nil {
+			go func() {
+				if notifyErr := s.notifySvc.SendInstanceFailedNotification(user.Username, instance.Name, reason); notifyErr != nil {
+					s.log.Warn(fmt.Sprintf("发送失败通知异常: %v", notifyErr))
+				}
+			}()
+		}
+	}
+
+	if instance == nil || user == nil {
+		s.log.Error("实例创建参数异常：instance 或 user 为空")
+		if instance != nil {
+			markFailed("实例创建参数异常")
+		}
+		return
+	}
+
 	// K8s Operator 未初始化时（本地开发），跳过创建
 	if s.operator == nil {
 		s.log.Warn(fmt.Sprintf("K8s Operator 未配置，跳过实例创建: %s", instance.Name))
-		s.db.Model(instance).Update("status", "failed")
+		markFailed("K8s Operator 未配置")
 		return
 	}
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				s.log.Error(fmt.Sprintf("异步实例创建发生 panic: instance=%s panic=%v", instance.Name, r))
+				markFailed("实例创建任务异常中断")
+			}
+		}()
+
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 		defer cancel()
 
-		s.log.Info(fmt.Sprintf("开始异步创建实例: %s", instance.Name))
+		s.log.Info(fmt.Sprintf("开始异步创建实例: id=%d name=%s namespace=%s", instance.ID, instance.Name, instance.Namespace))
 
 		// 配置部署参数
 		cfg := k8s.InstanceDeployConfig{
@@ -63,30 +91,14 @@ func (s *InstanceService) CreateInstance(instance *model.Instance, user *model.U
 		accessURL, err := s.operator.CreateInstance(ctx, cfg)
 		if err != nil {
 			s.log.Error(fmt.Sprintf("创建实例失败: %s, 错误: %v", instance.Name, err))
-			// 更新实例状态为 failed
-			s.db.Model(instance).Update("status", "failed")
-			// 异步发送失败通知
-			if s.notifySvc != nil {
-				go func() {
-					if notifyErr := s.notifySvc.SendInstanceFailedNotification(user.Username, instance.Name, err.Error()); notifyErr != nil {
-						s.log.Warn(fmt.Sprintf("发送失败通知异常: %v", notifyErr))
-					}
-				}()
-			}
+			markFailed(err.Error())
 			return
 		}
 
 		// 等待实例就绪
 		if err := s.operator.WaitForInstanceReady(ctx, instance.Namespace, 10*time.Minute); err != nil {
 			s.log.Error(fmt.Sprintf("等待实例就绪超时: %s, 错误: %v", instance.Name, err))
-			s.db.Model(instance).Update("status", "failed")
-			if s.notifySvc != nil {
-				go func() {
-					if notifyErr := s.notifySvc.SendInstanceFailedNotification(user.Username, instance.Name, "等待就绪超时"); notifyErr != nil {
-						s.log.Warn(fmt.Sprintf("发送超时通知异常: %v", notifyErr))
-					}
-				}()
-			}
+			markFailed("等待实例就绪超时")
 			return
 		}
 
