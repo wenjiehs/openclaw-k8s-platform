@@ -23,7 +23,7 @@ CREATE INDEX IF NOT EXISTS idx_users_department ON users(department);
 -- 密码哈希使用 bcrypt，这里是 admin123 的哈希值
 INSERT INTO users (username, email, department, role, password_hash)
 VALUES 
-    ('admin', 'admin@company.com', '技术部', 'super_admin', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy')
+    ('admin', 'admin@company.com', '技术部', 'super_admin', '$2a$10$GoBD4h8xragGE.3FpWXTdO86jBdIajirRiVWo/R3Pcan.FULOsk1C')
 ON CONFLICT (username) DO NOTHING;
 
 COMMENT ON TABLE users IS '用户表：存储平台用户信息';
