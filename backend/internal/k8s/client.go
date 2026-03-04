@@ -3,6 +3,8 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -16,6 +18,36 @@ import (
 	"github.com/openclaw/openclaw-saas-platform/pkg/config"
 	"github.com/openclaw/openclaw-saas-platform/pkg/logger"
 )
+
+var (
+	invalidLabelChars = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
+	labelEdgeTrim     = regexp.MustCompile(`^[^A-Za-z0-9]+|[^A-Za-z0-9]+$`)
+)
+
+// sanitizeLabelValue 将任意字符串转换为合法的 K8s Label Value
+// 规则：仅保留 [A-Za-z0-9._-]，并保证首尾是字母或数字，最大长度 63
+func sanitizeLabelValue(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "unknown"
+	}
+
+	value = invalidLabelChars.ReplaceAllString(value, "-")
+	value = labelEdgeTrim.ReplaceAllString(value, "")
+	if value == "" {
+		return "unknown"
+	}
+
+	if len(value) > 63 {
+		value = value[:63]
+		value = labelEdgeTrim.ReplaceAllString(value, "")
+	}
+	if value == "" {
+		return "unknown"
+	}
+
+	return value
+}
 
 // Client K8s 客户端封装
 type Client struct {
@@ -57,14 +89,24 @@ func NewClient(cfg *config.Config, log *logger.Logger) (*Client, error) {
 
 // CreateNamespace 创建用户专属 Namespace
 func (c *Client) CreateNamespace(ctx context.Context, namespace, username, department string) error {
+	safeUsername := sanitizeLabelValue(username)
+	safeDepartment := sanitizeLabelValue(department)
+	if safeUsername != username || safeDepartment != department {
+		c.log.Warn(fmt.Sprintf("Namespace label 已规范化: namespace=%s user=%s->%s department=%s->%s", namespace, username, safeUsername, department, safeDepartment))
+	}
+
 	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: namespace,
 			Labels: map[string]string{
 				"app":        "openclaw",
-				"user":       username,
-				"department": department,
+				"user":       safeUsername,
+				"department": safeDepartment,
 				"managed-by": "openclaw-saas",
+			},
+			Annotations: map[string]string{
+				"openclaw.io/raw-user":       username,
+				"openclaw.io/raw-department": department,
 			},
 		},
 	}
@@ -89,7 +131,7 @@ func (c *Client) DeleteNamespace(ctx context.Context, namespace string) error {
 
 // CreatePVC 创建持久化存储
 func (c *Client) CreatePVC(ctx context.Context, namespace string, storageSize string) error {
-	storageClass := "tke-cbs" // TKE 云硬盘存储类
+	storageClass := "cbs" // 默认使用集群中的 cbs 存储类
 	quantity, err := parseQuantity(storageSize)
 	if err != nil {
 		return err
@@ -240,8 +282,8 @@ func (c *Client) CreateIngress(ctx context.Context, namespace, hostname string) 
 			Name:      "openclaw-ingress",
 			Namespace: namespace,
 			Annotations: map[string]string{
-				"kubernetes.io/ingress.class":      "nginx",
-				"cert-manager.io/cluster-issuer":   "letsencrypt-prod",
+				"kubernetes.io/ingress.class":                       "nginx",
+				"cert-manager.io/cluster-issuer":                    "letsencrypt-prod",
 				"nginx.ingress.kubernetes.io/proxy-connect-timeout": "60",
 				"nginx.ingress.kubernetes.io/proxy-read-timeout":    "300",
 			},

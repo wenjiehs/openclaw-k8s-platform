@@ -25,6 +25,9 @@ func NewRouter(cfg *config.Config, log *logger.Logger) (*gin.Engine, error) {
 	// 创建 Gin 引擎（使用默认中间件：Logger + Recovery）
 	r := gin.New()
 
+	// 添加请求日志中间件（记录每个 HTTP 请求）
+	r.Use(gin.Logger())
+
 	// 添加恢复中间件（防止 panic 导致服务崩溃）
 	r.Use(gin.Recovery())
 
@@ -59,6 +62,8 @@ func NewRouter(cfg *config.Config, log *logger.Logger) (*gin.Engine, error) {
 
 	// JWT 鉴权中间件
 	authMiddleware := middleware.NewAuthMiddleware(cfg.JWT.Secret)
+	// 审计日志中间件（记录关键写操作）
+	auditMiddleware := middleware.NewAuditMiddleware(db)
 
 	// ====== 路由配置 ======
 	// 健康检查（不需要认证）
@@ -81,7 +86,7 @@ func NewRouter(cfg *config.Config, log *logger.Logger) (*gin.Engine, error) {
 
 		// ====== 需要 JWT 认证的接口 ======
 		authenticated := v1.Group("")
-		authenticated.Use(authMiddleware.Authenticate())
+		authenticated.Use(authMiddleware.Authenticate(), auditMiddleware.AutoAudit())
 		{
 			// GET /api/v1/auth/me - 获取当前用户信息
 			authenticated.GET("/auth/me", authHandler.Me)

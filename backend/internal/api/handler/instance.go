@@ -152,6 +152,17 @@ func (h *InstanceHandler) Delete(c *gin.Context) {
 		return
 	}
 
+	// 设置审计上下文（后续由审计中间件统一落库）
+	middleware.SetAuditContext(c, middleware.AuditContext{
+		Action:       "delete",
+		ResourceType: "instance",
+		ResourceID:   strconv.Itoa(id),
+		Extra: map[string]interface{}{
+			"instance_name": instance.Name,
+			"namespace":     instance.Namespace,
+		},
+	})
+
 	// 若 InstanceService 可用（K8s 已配置），通过 Service 删除（含 K8s 资源清理）
 	if h.instSvc != nil {
 		if err := h.instSvc.DeleteInstance(&instance); err != nil {

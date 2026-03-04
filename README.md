@@ -167,6 +167,24 @@ cp backend/.env.example backend/.env
 | `QCLOUD_SECRET_ID` | 腾讯云 API 密钥 ID | `AKIDxxxx` |
 | `QCLOUD_SECRET_KEY` | 腾讯云 API 密钥 Key | `xxxxxxxx` |
 
+## K8s 集群接入注意事项
+
+- 后端创建实例时会自动创建 Namespace/PVC/Deployment/Service/Ingress。
+- PVC 默认使用 `cbs` 存储类；部署前请确认集群存在该 StorageClass：
+
+```bash
+kubectl get storageclass
+```
+
+- Namespace 标签会自动规范化（例如部门中文名会转换为合法 label），原始值会保存在 Namespace annotations。
+- 如果实例长期处于 `creating`，建议优先排查以下资源事件：
+
+```bash
+kubectl -n <namespace> get pvc,pods,ingress
+kubectl -n <namespace> describe pvc openclaw-data
+kubectl -n <namespace> describe pod <pod-name>
+```
+
 ## API 文档
 
 ### 认证接口
@@ -202,6 +220,7 @@ cp backend/.env.example backend/.env
 | POST | `/api/v1/admin/applications/:id/reject` | 拒绝申请 |
 | GET | `/api/v1/admin/instances` | 所有实例列表 |
 | GET | `/api/v1/admin/metrics/summary` | 监控汇总数据 |
+| GET | `/api/v1/admin/audit-logs` | 审计日志查询 |
 
 ## 部署
 
